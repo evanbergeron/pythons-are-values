@@ -1,2 +1,4 @@
-def foo(a):
-    return a
+def foo(x):
+    print x
+    return x
+
