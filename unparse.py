@@ -129,11 +129,12 @@ class Unparser:
         interleave(lambda: self.write(", "), self.dispatch, t.targets)
 
     def _Assert(self, t):
-        self.fill("assert ")
+        self.fill("assert(")
         self.dispatch(t.test)
         if t.msg:
             self.write(", ")
             self.dispatch(t.msg)
+        self.write(")")
 
     def _Exec(self, t):
         self.fill("exec ")

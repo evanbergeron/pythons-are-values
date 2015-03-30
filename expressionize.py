@@ -4,24 +4,14 @@ import unparse
 from cStringIO import StringIO
 
 # Imports sys and defines a new print function
-IMPORT_SYS = "__import__('sys')._getframe(-1).f_locals.update({'sys':__import__('sys')}) or sys._getframe(-1).f_locals.update({'printf': lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s)))})\n"
+IMPORT_SYS = "__import__('sys')._getframe(-1).f_locals.update({'sys':__import__('sys')}) or sys._getframe(-1).f_locals.update({'printf': lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s))), 'vvvs' : sys._getframe(-1).f_locals, 'let': lambda x, v : vvvs.update({x:v}), 'throw': lambda e, msg : (_ for _ in ()).throw(e(msg))})\n"
 
-class OrBody(ast.NodeTransformer):
-    def generic_visit(self, node):
-        if 'body' in node.__dict__:
-            # node.__dict__['body'] = self.orTogether(node)
-            return self.orTogether(node)
-        return node
+class Expressionizer(ast.NodeTransformer):
 
-    # @staticmethod
-    def orTogether(self, node):
-        goal = ['False']
-        tmp = StringIO()
-        for subnode in node.__dict__['body']:
-            goal.append(self.unparsed(subnode).strip())
-        goal = " or ".join(goal)
-        # assert(False)
-        return self.parsed(goal)
+    @staticmethod
+    def parsed(source):
+        source = ast.parse(source)
+        return source.__dict__['body'][0]
 
     @staticmethod
     def unparsed(node):
@@ -31,12 +21,53 @@ class OrBody(ast.NodeTransformer):
         tmp.close()
         return result
 
-    @staticmethod
-    def parsed(source):
-        source = ast.parse(source)
-        return source.__dict__['body'][0]
+class OrBody(Expressionizer):
 
-class ExpressionizeAssignmentsAndPrint(ast.NodeTransformer):
+    def generic_visit(self, node):
+        if 'body' in node.__dict__:
+            return self.orTogether(node)
+        return node
+
+    def orTogether(self, node):
+        goal = ['False']
+        tmp = StringIO()
+        for subnode in node.__dict__['body']:
+            goal.append(self.unparsed(subnode).strip())
+        goal = " or ".join(goal)
+        return self.parsed(goal)
+
+class ReturnToValue(Expressionizer):
+
+    def visit_Return(self, node):
+        src = self.unparsed(node)
+        goal = " ".join([item.strip() for item in src.split("return")[1:]])
+        return self.parsed(goal)
+
+class DefToLambda(Expressionizer):
+
+    @staticmethod
+    def function_name(node):
+        return node.__dict__['name']
+
+    @staticmethod
+    def function_args(node):
+        return node.__dict__['args']
+
+    @staticmethod
+    def function_body(node):
+        orTogether = OrBody()
+        return orTogether.visit(node)
+
+    def visit_FunctionDef(self, node):
+        args = self.unparsed(self.function_args(node))
+        # name = self.unparsed(self.function_name(node))
+        name = self.function_name(node)
+        body = self.unparsed(self.function_body(node))
+        func = "lambda %s : %s" % (args, body)
+        goal = "let(%r, %s)" % (name, func)
+        return self.parsed(goal)
+
+class LineByLineExpressionizer(Expressionizer):
 
     def visit_Print(self, node):
         printedObjects = node.__dict__['values']
@@ -62,14 +93,17 @@ class ExpressionizeAssignmentsAndPrint(ast.NodeTransformer):
         goal = "([%s for %s in [%s]] and False)" % (target, target, value)
         return self.parsed(goal)
 
-    @staticmethod
-    def parsed(source):
-        source = ast.parse(source)
-        return source.__dict__['body'][0]
+    def visit_Import(self, node):
+        src = self.unparsed(node)
+        module = src.split(" ")[1]
+        goal = "(not [%s for %s in [__import__('%s')]])" % (module, module, module)
+        return self.parsed(goal)
 
-def orTogether(src):
-    src = src.split("\n")
-    return "False" + " or ".join(src)
+    def visit_Assert(self, node):
+        src = self.unparsed(node)
+        condition = " ".join(src.split("assert")[1:])
+        goal = "((%s or throw(AssertionError, '')) and False)" % condition
+        return self.parsed(goal)
 
 if __name__ == "__main__":
     if len(sys.argv) == 2:
@@ -79,21 +113,26 @@ if __name__ == "__main__":
         exit(-1)
     with open(source, "r+") as src:
         src = src.read()
-
         src = IMPORT_SYS + src
         unmodified = ast.parse(src)
 
-        transformer = ExpressionizeAssignmentsAndPrint()
+        # Fix variables assignments and print statements
+        transformer = LineByLineExpressionizer()
         modified = transformer.visit(unmodified)
 
-        result = StringIO()
+        # Get rid of returns
+        noReturns = ReturnToValue()
+        modified = noReturns.visit(unmodified)
+        # Func to lambda
+        noDefs = DefToLambda()
+        modified = noDefs.visit(modified)
 
+        # Or together bodies
         orMaster = OrBody()
         modified = orMaster.visit(modified)
 
+        # Unparse AST and write to result
+        result = StringIO()
         unparse.Unparser(modified, result)
-
-
         print "%s\n" % result.getvalue().strip()
         result.close()
-        # print orTogether(result.getvalue())

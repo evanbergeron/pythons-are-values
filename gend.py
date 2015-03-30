@@ -1,0 +1,2 @@
+(False or (__import__('sys')._getframe((-1)).f_locals.update({'sys': __import__('sys')}) or sys._getframe((-1)).f_locals.update({'printf': (lambda *s: sys.stdout.write(('%s\n' % ' '.join(map(str, s)))))})) or (not [sys for sys in [__import__('sys')]]) or ([vvvvs for vvvvs in [sys._getframe((-1)).f_locals]] and False) or ([let for let in [(lambda x, v: vvvvs.update({x: v}))]] and False) or let('x', 4) or printf(x))
+
