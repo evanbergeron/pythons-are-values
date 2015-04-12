@@ -29,7 +29,7 @@ class OrBody(Expressionizer):
         return node
 
     def orTogether(self, node):
-        goal = ['False']
+        goal = ['()']
         tmp = StringIO()
         for subnode in node.__dict__['body']:
             goal.append(self.unparsed(subnode).strip())
@@ -41,6 +41,21 @@ class ReturnToValue(Expressionizer):
     def visit_Return(self, node):
         src = self.unparsed(node)
         goal = " ".join([item.strip() for item in src.split("return")[1:]])
+        return self.parsed(goal)
+
+class ExpressionizeForLoops(Expressionizer):
+
+    def visit_For(self, node):
+
+        # Grab loop line
+        src = self.unparsed(node)
+        loopLine = src.split("\n")[1][:-1] # remove colon
+
+        # Or together body
+        orTogether = OrBody()
+        node = orTogether.visit(node)
+        body = self.unparsed(node)
+        goal = "[(lambda : %s)() %s]" % (body, loopLine)
         return self.parsed(goal)
 
 class DefToLambda(Expressionizer):
@@ -90,7 +105,7 @@ class LineByLineExpressionizer(Expressionizer):
         target = currentLineOfCode.split("=")[0]
         value = currentLineOfCode.split("=")[1]
         # List comphrensions have side effects
-        goal = "([%s for %s in [%s]] and False)" % (target, target, value)
+        goal = "([%s for %s in [%s]] and ())" % (target, target, value)
         return self.parsed(goal)
 
     def visit_Import(self, node):
@@ -102,7 +117,7 @@ class LineByLineExpressionizer(Expressionizer):
     def visit_Assert(self, node):
         src = self.unparsed(node)
         condition = " ".join(src.split("assert")[1:])
-        goal = "((%s or throw(AssertionError, '')) and False)" % condition
+        goal = "((%s or throw(AssertionError, '')) and ())" % condition
         return self.parsed(goal)
 
 if __name__ == "__main__":
@@ -126,6 +141,10 @@ if __name__ == "__main__":
         # Func to lambda
         noDefs = DefToLambda()
         modified = noDefs.visit(modified)
+
+        # fix Loops
+        fixForLoops = ExpressionizeForLoops()
+        modified = fixForLoops.visit(modified)
 
         # Or together bodies
         orMaster = OrBody()
