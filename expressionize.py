@@ -9,8 +9,11 @@ from cStringIO import StringIO
 IMPORT_SYS = "__import__('sys')._getframe(-1).f_locals.update({'sys':__import__('sys')})"
 DEF_VARS = "sys._getframe(-1).f_locals.update({'vvvs' : sys._getframe(-1).f_locals})"
 DEF_LET = "sys._getframe(-1).f_locals.update({'let': lambda x, v : vvvs.update({x:v})})"
-DEF_THROW = "let('throw': lambda e, msg : (_ for _ in ()).throw(e(msg)))"
-DEF_PRINTF = "let('printf': lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s))))"
+DEF_THROW = "let('throw', lambda e, msg : (_ for _ in ()).throw(e(msg)))"
+DEF_PRINTF = "let('printf', lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s))))"
+
+MACROS = [IMPORT_SYS, DEF_VARS, DEF_LET, DEF_THROW, DEF_PRINTF]
+HEADER = " or ".join(MACROS) + "\n"
 
 def parsed(source):
     source = ast.parse(source)
@@ -169,9 +172,9 @@ if __name__ == "__main__":
         exit(-1)
     with open(source, "r+") as src:
         src = src.read()
-        src = IMPORT_SYS + src
+        src = HEADER + src
         unmodified = ast.parse(src)
-        pprint([n for n in body_nodes_reverse_bfs(unmodified)])
+        # pprint([n for n in body_nodes_reverse_bfs(unmodified)])
 
         # Fix variables assignments and print statements
         transformer = LineByLineExpressionizer()
