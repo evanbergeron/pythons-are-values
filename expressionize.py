@@ -9,7 +9,7 @@ from cStringIO import StringIO
 IMPORT_SYS = "__import__('sys')._getframe(-1).f_locals.update({'sys':__import__('sys')})"
 DEF_VARS = "sys._getframe(-1).f_locals.update({'vvvs' : sys._getframe(-1).f_locals})"
 DEF_LET = "sys._getframe(-1).f_locals.update({'let': lambda x, v : vvvs.update({x:v})})"
-DEF_THROW = "let('throw', lambda e, msg : (_ for _ in ()).throw(e(msg)))"
+DEF_THROW = "let('throw', lambda e : (_ for _ in ()).throw(e))"
 DEF_PRINTF = "let('printf', lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s))))"
 
 MACROS = [IMPORT_SYS, DEF_VARS, DEF_LET, DEF_THROW, DEF_PRINTF]
@@ -143,6 +143,12 @@ class LineByLineExpressionizer(Expressionizer):
         src = self.unparsed(node)
         condition = " ".join(src.split("assert")[1:])
         goal = "((%s or throw(AssertionError, '')) and ())" % condition
+        return self.parsed(goal)
+
+    def visit_Raise(self, node):
+        src = self.unparsed(node)
+        toThrow = "".join(src.split("raise")[1:])
+        goal = "throw(%s)" % toThrow
         return self.parsed(goal)
 
 def body_nodes_reverse_bfs(root):
