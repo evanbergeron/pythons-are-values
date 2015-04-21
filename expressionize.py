@@ -1,10 +1,27 @@
 import sys
 import ast
 import unparse
+from pprint import pprint
+from collections import deque
 from cStringIO import StringIO
 
-# Imports sys and defines a new print function
-IMPORT_SYS = "__import__('sys')._getframe(-1).f_locals.update({'sys':__import__('sys')}) or sys._getframe(-1).f_locals.update({'printf': lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s))), 'vvvs' : sys._getframe(-1).f_locals, 'let': lambda x, v : vvvs.update({x:v}), 'throw': lambda e, msg : (_ for _ in ()).throw(e(msg))})\n"
+# Helpful macros
+IMPORT_SYS = "__import__('sys')._getframe(-1).f_locals.update({'sys':__import__('sys')})"
+DEF_VARS = "sys._getframe(-1).f_locals.update({'vvvs' : sys._getframe(-1).f_locals})"
+DEF_LET = "sys._getframe(-1).f_locals.update({'let': lambda x, v : vvvs.update({x:v})})"
+DEF_THROW = "let('throw': lambda e, msg : (_ for _ in ()).throw(e(msg)))"
+DEF_PRINTF = "let('printf': lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s))))"
+
+def parsed(source):
+    source = ast.parse(source)
+    return source.__dict__['body'][0]
+
+def unparsed(node):
+    tmp = StringIO()
+    unparse.Unparser(node, tmp)
+    result = tmp.getvalue()
+    tmp.close()
+    return result
 
 class Expressionizer(ast.NodeTransformer):
 
@@ -20,6 +37,11 @@ class Expressionizer(ast.NodeTransformer):
         result = tmp.getvalue()
         tmp.close()
         return result
+
+class BFS(Expressionizer):
+
+    def generic_visit(self, node):
+        pass
 
 class OrBody(Expressionizer):
 
@@ -120,6 +142,25 @@ class LineByLineExpressionizer(Expressionizer):
         goal = "((%s or throw(AssertionError, '')) and ())" % condition
         return self.parsed(goal)
 
+def body_nodes_reverse_bfs(root):
+    result = []
+    visitedNodes = set()
+    queue = deque([root])
+
+    while len(queue) > 0:
+        node = queue.pop()
+        if node in visitedNodes:
+            continue
+
+        visitedNodes.add(node)
+        if 'body' in node.__dict__:
+            result.append(node)
+
+        for child in ast.iter_child_nodes(node):
+            if child not in visitedNodes:
+                queue.appendleft(child)
+    return reversed(result)
+
 if __name__ == "__main__":
     if len(sys.argv) == 2:
         source = sys.argv[1]
@@ -130,6 +171,7 @@ if __name__ == "__main__":
         src = src.read()
         src = IMPORT_SYS + src
         unmodified = ast.parse(src)
+        pprint([n for n in body_nodes_reverse_bfs(unmodified)])
 
         # Fix variables assignments and print statements
         transformer = LineByLineExpressionizer()
@@ -138,6 +180,7 @@ if __name__ == "__main__":
         # Get rid of returns
         noReturns = ReturnToValue()
         modified = noReturns.visit(unmodified)
+
         # Func to lambda
         noDefs = DefToLambda()
         modified = noDefs.visit(modified)
