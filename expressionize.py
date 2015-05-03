@@ -7,8 +7,8 @@ from cStringIO import StringIO
 
 # Helpful macros
 IMPORT_SYS = "__import__('sys')._getframe(-1).f_locals.update({'sys':__import__('sys')})"
-DEF_VARS = "sys._getframe(-1).f_locals.update({'vvvs' : sys._getframe(-1).f_locals})"
-DEF_LET = "sys._getframe(-1).f_locals.update({'let': lambda x, v : vvvs.update({x:v})})"
+DEF_VARS = "sys._getframe(-1).f_locals.update({'MODULE_LEVEL_VARS' : sys._getframe(-1).f_locals})"
+DEF_LET = "sys._getframe(-1).f_locals.update({'let': lambda x, v : MODULE_LEVEL_VARS.update({x:v})})"
 DEF_THROW = "let('throw', lambda e : (_ for _ in ()).throw(e))"
 DEF_PRINTF = "let('printf', lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s))))"
 
@@ -107,6 +107,29 @@ class DefToLambda(Expressionizer):
         goal = "let(%r, %s)" % (name, func)
         return self.parsed(goal)
 
+class ExpressionizeConditionals(Expressionizer):
+
+    def visit_If(self, node):
+        print self.fix_ifs(node)
+        return self.parsed(self.fix_ifs(node))
+
+    def fix_ifs(self, node):
+        if type(node) is not ast.If:
+            if type(node) is str:
+                return node.strip()
+            else:
+                return self.unparsed(node)
+        # Otherwise, we know we have an if
+        test = self.unparsed(node.test)
+        body = self.unparsed(node.body).strip()
+        if hasattr(node, "orelse"):
+            orelseCase = [self.fix_ifs(bnode) for bnode in node.orelse]
+            goal = "(%s) if %s else (%s)" % (self.fix_ifs(body), test,
+                                             " or ".join(orelseCase))
+        else:
+            goal = "(%s) if %s else None" % (body, test)
+        return goal
+
 class LineByLineExpressionizer(Expressionizer):
 
     def visit_Print(self, node):
@@ -117,7 +140,6 @@ class LineByLineExpressionizer(Expressionizer):
         goal = "printf(%s)" % str(tmp.getvalue())
         tmp.close()
         return self.parsed(goal)
-        return node
 
     def visit_Assign(self, node):
         # Unparse node into currentLineOfCode
@@ -180,6 +202,7 @@ if __name__ == "__main__":
         src = src.read()
         src = HEADER + src
         unmodified = ast.parse(src)
+        # print ast.dump(unmodified)
         # pprint([n for n in body_nodes_reverse_bfs(unmodified)])
 
         # Fix variables assignments and print statements
@@ -190,20 +213,20 @@ if __name__ == "__main__":
         noReturns = ReturnToValue()
         modified = noReturns.visit(unmodified)
 
-        # Func to lambda
-        noDefs = DefToLambda()
-        modified = noDefs.visit(modified)
+        # Conditionals
+        conds = ExpressionizeConditionals()
+        modified = conds.visit(modified)
 
         # fix Loops
         fixForLoops = ExpressionizeForLoops()
         modified = fixForLoops.visit(modified)
 
+        # Func to lambda
+        noDefs = DefToLambda()
+        modified = noDefs.visit(modified)
+
         # Or together bodies
         orMaster = OrBody()
         modified = orMaster.visit(modified)
 
-        # Unparse AST and write to result
-        result = StringIO()
-        unparse.Unparser(modified, result)
-        print "%s\n" % result.getvalue().strip()
-        result.close()
+        print unparsed(modified).strip()
