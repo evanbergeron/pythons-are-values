@@ -155,6 +155,14 @@ class LineByLineExpressionizer(Expressionizer):
         goal = "([%s for %s in [%s]] and ())" % (target, target, value)
         return self.parsed(goal)
 
+    def visit_AugAssign(self, node):
+        # fields in an AugAssign:
+        #   node.target
+        #   node.value
+        #   node.op
+        return self.parsed()
+        return node
+
     def visit_Import(self, node):
         src = self.unparsed(node)
         module = src.split(" ")[1]

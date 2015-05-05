@@ -17,7 +17,9 @@ HEADER = " or ".join(MACROS) + "\n"
 DEBUG = False
 
 def parsed(source):
+    '''Meant for parsing single lines of code'''
     source = ast.parse(source)
+    # By default, type(source) is ast.Module
     return source.body[0]
 
 def unparsed(node):
@@ -28,6 +30,7 @@ def unparsed(node):
     return result.strip()
 
 def dfs_fix_children(node):
+    # Bears great resemblence to ast.iter_fields
     for name, field in ast.iter_fields(node):
         if isinstance(field, ast.AST):
             node.__dict__[name] = expressionize(field)
@@ -82,19 +85,21 @@ options = {
 def expressionize(node):
     if DEBUG: print type(node)
     dfs_fix_children(node)
+
     if hasattr(node, 'body') and type(node) is not ast.Module:
         # Replace multiple lines with a single list comphrension
         # TODO - not fully working
+
         if type(node.body) is list and len(node.body) > 1:
             lines = []
             for item in node.body:
                 lmbda = ast.Lambda(args = [], body = item)
                 lines.append(lmbda)
                 print lines
+            # Black magic
             goal =  str([unparsed(line).replace("\n", "") for line in lines]).replace("'", "")
-            print goal
-            print
             node.body = parsed("[_() for _ in %s]" % goal)
+
         elif isinstance(node.body, ast.AST):
             pass
 

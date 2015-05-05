@@ -1,4 +1,7 @@
 def foo():
-    for i in xrange(10):
-        def bar():
-            pass
+    def bar():
+        def baz():
+            None
+        baz()
+    bar()
+foo()
