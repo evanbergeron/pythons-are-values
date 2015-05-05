@@ -4,14 +4,16 @@ import unparse
 from cStringIO import StringIO
 
 # Helpful macros
-IMPORT_SYS = "__import__('sys')._getframe(-1).f_locals.update({'sys':__import__('sys')})"
-DEF_VARS = "sys._getframe(-1).f_locals.update({'MODULE_LEVEL_VARS' : sys._getframe(-1).f_locals})"
-DEF_LET = "sys._getframe(-1).f_locals.update({'let': lambda x, v : MODULE_LEVEL_VARS.update({x:v})})"
+DEF_LET = "globals().update({'let': lambda k,v : globals().update({k:v})})"
+IMPORT_SYS = "let('sys', __import__('sys'))"
 DEF_THROW = "let('throw', lambda e : (_ for _ in ()).throw(e))"
 DEF_PRINTF = "let('printf', lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s))))"
 
-MACROS = [IMPORT_SYS, DEF_VARS, DEF_LET, DEF_THROW, DEF_PRINTF]
+MACROS = [DEF_LET, IMPORT_SYS, DEF_THROW, DEF_PRINTF]
 HEADER = " or ".join(MACROS) + "\n"
+
+with open("a.py", 'w') as f:
+  f.write(HEADER)
 
 # DEBUG = True
 DEBUG = False
