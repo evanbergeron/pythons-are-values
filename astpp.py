@@ -42,7 +42,7 @@ def dump(node, annotate_fields=True, include_attributes=False, indent='  '):
     if not isinstance(node, AST):
         raise TypeError('expected AST, got %r' % node.__class__.__name__)
     return _format(node)
-    
+
 if __name__ == '__main__':
     import sys
     for filename in sys.argv[1:]:

@@ -1,240 +1,123 @@
-import sys
 import ast
+import sys
 import unparse
-from pprint import pprint
-from collections import deque
 from cStringIO import StringIO
 
 # Helpful macros
-IMPORT_SYS = "__import__('sys')._getframe(-1).f_locals.update({'sys':__import__('sys')})"
-DEF_VARS = "sys._getframe(-1).f_locals.update({'MODULE_LEVEL_VARS' : sys._getframe(-1).f_locals})"
-DEF_LET = "sys._getframe(-1).f_locals.update({'let': lambda x, v : MODULE_LEVEL_VARS.update({x:v})})"
+DEF_LET = "globals().update({'let': lambda k,v : globals().update({k:v})})"
+IMPORT_SYS = "let('sys', __import__('sys'))"
 DEF_THROW = "let('throw', lambda e : (_ for _ in ()).throw(e))"
 DEF_PRINTF = "let('printf', lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s))))"
 
-MACROS = [IMPORT_SYS, DEF_VARS, DEF_LET, DEF_THROW, DEF_PRINTF]
+MACROS = [DEF_LET, IMPORT_SYS, DEF_THROW, DEF_PRINTF]
 HEADER = " or ".join(MACROS) + "\n"
 
+with open("a.py", 'w') as f:
+  f.write(HEADER)
+
+# DEBUG = True
+DEBUG = False
+
 def parsed(source):
+    '''Meant for parsing single lines of code'''
     source = ast.parse(source)
-    return source.__dict__['body'][0]
+    # By default, type(source) is ast.Module
+    return source.body[0]
 
 def unparsed(node):
     tmp = StringIO()
     unparse.Unparser(node, tmp)
     result = tmp.getvalue()
     tmp.close()
-    return result
+    return result.strip()
 
-class Expressionizer(ast.NodeTransformer):
+def dfs_fix_children(node):
+    # Bears great resemblence to ast.iter_fields
+    for name, field in ast.iter_fields(node):
+        if isinstance(field, ast.AST):
+            node.__dict__[name] = expressionize(field)
+        elif isinstance(field, list):
+            newField = []
+            for item in field:
+                if isinstance(item, ast.AST):
+                    newField.append(expressionize(item))
+            node.__dict__[name] = newField
+    return None
 
-    @staticmethod
-    def parsed(source):
-        source = ast.parse(source)
-        return source.__dict__['body'][0]
+def visit_Module(node):
+    return node
 
-    @staticmethod
-    def unparsed(node):
-        tmp = StringIO()
-        unparse.Unparser(node, tmp)
-        result = tmp.getvalue()
-        tmp.close()
-        return result
+def visit_Print(node):
+    args = ", ".join([unparsed(value) for value in node.values])
+    goal = "printf(%s)" % args
+    return parsed(goal)
 
-class BFS(Expressionizer):
+def visit_Assign(node):
+    targets = unparsed(node.targets)
+    value = unparsed(node.value)
+    goal = "[%s for %s in [%s]]" % (targets, targets, value)
+    return parsed(goal)
 
-    def generic_visit(self, node):
-        pass
+def visit_Num(node):
+    return node
 
-class OrBody(Expressionizer):
+def visit_FunctionDef(node):
+    name = node.name
+    args = unparsed(node.args)
+    body = unparsed(node.body)
+    func = "lambda %s : %s" % (args, body)
+    goal = "[%s for %s in [%s]]" % (name, name, func)
+    return parsed(goal)
 
-    def generic_visit(self, node):
-        if 'body' in node.__dict__:
-            return self.orTogether(node)
+def visit_Return(node):
+    return node.value
+
+options = {
+
+    ast.Module      : visit_Module,
+    ast.Print       : visit_Print,
+    ast.Num         : visit_Num,
+    ast.Assign      : visit_Assign,
+    ast.Num         : visit_Num,
+    ast.FunctionDef : visit_FunctionDef,
+    ast.Return      : visit_Return,
+
+}
+
+def expressionize(node):
+    if DEBUG: print type(node)
+    dfs_fix_children(node)
+
+    if hasattr(node, 'body') and type(node) is not ast.Module:
+        # Replace multiple lines with a single list comphrension
+        # TODO - not fully working
+
+        if type(node.body) is list and len(node.body) > 1:
+            lines = []
+            for item in node.body:
+                lmbda = ast.Lambda(args = [], body = item)
+                lines.append(lmbda)
+                print lines
+            # Black magic
+            goal =  str([unparsed(line).replace("\n", "") for line in lines]).replace("'", "")
+            node.body = parsed("[_() for _ in %s]" % goal)
+
+        elif isinstance(node.body, ast.AST):
+            pass
+
+    try: return options[type(node)](node)
+    except KeyError:
         return node
-
-    def orTogether(self, node):
-        goal = ['()']
-        tmp = StringIO()
-        for subnode in node.__dict__['body']:
-            goal.append(self.unparsed(subnode).strip())
-        goal = " or ".join(goal)
-        return self.parsed(goal)
-
-class ReturnToValue(Expressionizer):
-
-    def visit_Return(self, node):
-        src = self.unparsed(node)
-        goal = " ".join([item.strip() for item in src.split("return")[1:]])
-        return self.parsed(goal)
-
-class ExpressionizeForLoops(Expressionizer):
-
-    def visit_For(self, node):
-
-        # Grab loop line
-        src = self.unparsed(node)
-        loopLine = src.split("\n")[1][:-1] # remove colon
-
-        # Or together body
-        orTogether = OrBody()
-        node = orTogether.visit(node)
-        body = self.unparsed(node)
-        goal = "[(lambda : %s)() %s]" % (body, loopLine)
-        return self.parsed(goal)
-
-class DefToLambda(Expressionizer):
-
-    @staticmethod
-    def function_name(node):
-        return node.__dict__['name']
-
-    @staticmethod
-    def function_args(node):
-        return node.__dict__['args']
-
-    @staticmethod
-    def function_body(node):
-        orTogether = OrBody()
-        return orTogether.visit(node)
-
-    def visit_FunctionDef(self, node):
-        args = self.unparsed(self.function_args(node))
-        # name = self.unparsed(self.function_name(node))
-        name = self.function_name(node)
-        body = self.unparsed(self.function_body(node))
-        func = "lambda %s : %s" % (args, body)
-        goal = "let(%r, %s)" % (name, func)
-        return self.parsed(goal)
-
-class ExpressionizeConditionals(Expressionizer):
-
-    def visit_If(self, node):
-        print self.fix_ifs(node)
-        return self.parsed(self.fix_ifs(node))
-
-    def fix_ifs(self, node):
-        if type(node) is not ast.If:
-            if type(node) is str:
-                return node.strip()
-            else:
-                return self.unparsed(node)
-        # Otherwise, we know we have an if
-        test = self.unparsed(node.test)
-        body = self.unparsed(node.body).strip()
-        if hasattr(node, "orelse"):
-            orelseCase = [self.fix_ifs(bnode) for bnode in node.orelse]
-            goal = "(%s) if %s else (%s)" % (self.fix_ifs(body), test,
-                                             " or ".join(orelseCase))
-        else:
-            goal = "(%s) if %s else None" % (body, test)
-        return goal
-
-class LineByLineExpressionizer(Expressionizer):
-
-    def visit_Print(self, node):
-        printedObjects = node.__dict__['values']
-        tmp = StringIO()
-        for obj in printedObjects:
-            unparse.Unparser(obj, tmp)
-        goal = "printf(%s)" % str(tmp.getvalue())
-        tmp.close()
-        return self.parsed(goal)
-
-    def visit_Assign(self, node):
-        # Unparse node into currentLineOfCode
-        tmp = StringIO()
-        unparse.Unparser(node, tmp)
-        currentLineOfCode = tmp.getvalue()
-        tmp.write("")
-        tmp.close()
-        # Grab target and value
-        target = currentLineOfCode.split("=")[0]
-        value = currentLineOfCode.split("=")[1]
-        # List comphrensions have side effects
-        goal = "([%s for %s in [%s]] and ())" % (target, target, value)
-        return self.parsed(goal)
-
-    def visit_AugAssign(self, node):
-        # fields in an AugAssign:
-        #   node.target
-        #   node.value
-        #   node.op
-        return self.parsed()
-        return node
-
-    def visit_Import(self, node):
-        src = self.unparsed(node)
-        module = src.split(" ")[1]
-        goal = "(not [%s for %s in [__import__('%s')]])" % (module, module, module)
-        return self.parsed(goal)
-
-    def visit_Assert(self, node):
-        src = self.unparsed(node)
-        condition = " ".join(src.split("assert")[1:])
-        goal = "((%s or throw(AssertionError, '')) and ())" % condition
-        return self.parsed(goal)
-
-    def visit_Raise(self, node):
-        src = self.unparsed(node)
-        toThrow = "".join(src.split("raise")[1:])
-        goal = "throw(%s)" % toThrow
-        return self.parsed(goal)
-
-def body_nodes_reverse_bfs(root):
-    result = []
-    visitedNodes = set()
-    queue = deque([root])
-
-    while len(queue) > 0:
-        node = queue.pop()
-        if node in visitedNodes:
-            continue
-
-        visitedNodes.add(node)
-        if 'body' in node.__dict__:
-            result.append(node)
-
-        for child in ast.iter_child_nodes(node):
-            if child not in visitedNodes:
-                queue.appendleft(child)
-    return reversed(result)
 
 if __name__ == "__main__":
-    if len(sys.argv) == 2:
-        source = sys.argv[1]
-    else:
-        print "No command line argument found"
-        exit(-1)
-    with open(source, "r+") as src:
+    with open(sys.argv[1], "r") as src:
         src = src.read()
+        if DEBUG: print src
         src = HEADER + src
-        unmodified = ast.parse(src)
-        # print ast.dump(unmodified)
-        # pprint([n for n in body_nodes_reverse_bfs(unmodified)])
-
-        # Fix variables assignments and print statements
-        transformer = LineByLineExpressionizer()
-        modified = transformer.visit(unmodified)
-
-        # Get rid of returns
-        noReturns = ReturnToValue()
-        modified = noReturns.visit(unmodified)
-
-        # Conditionals
-        conds = ExpressionizeConditionals()
-        modified = conds.visit(modified)
-
-        # fix Loops
-        fixForLoops = ExpressionizeForLoops()
-        modified = fixForLoops.visit(modified)
-
-        # Func to lambda
-        noDefs = DefToLambda()
-        modified = noDefs.visit(modified)
-
-        # Or together bodies
-        orMaster = OrBody()
-        modified = orMaster.visit(modified)
-
-        print unparsed(modified).strip()
+        try:
+            root = ast.parse(src)
+        except SyntaxError:
+            print "Invalid syntax in original file"
+            exit(-1)
+        exp = expressionize(root)
+        print unparsed(exp).strip()
