@@ -3,6 +3,7 @@
 Pythons are Values is a hypothesis - that every python program has an equivalent one-liner. This goal is accomplished in a number of horrible, horrible ways. More coming soon.
 
 ### Todo
+- Bring exp.py up to date in functionality
 - Conditionals
 - Tail recursion optimization to fix while loop lambda
 - Reverse level order expressionizing for nesting issues
