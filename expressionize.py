@@ -79,6 +79,22 @@ def visit_For(node):
     goal = "[%s for %s in %s]" % (body, target, iterable)
     return parsed(goal)
 
+def visit_If(node):
+    test = unparsed(node.test)
+    body = unparsed(node.body)
+    if hasattr(node, "orelse"):
+        elseClause = "%s" % unparsed(node.orelse)
+    else:
+        elseClause = "None"
+    goal = "%s if %s else %s" % (body, test, elseClause)
+    return parsed(goal)
+
+def visit_Assert(node):
+    test = unparsed(node.test)
+    msg = unparsed(node.msg) if node.msg is not None else ""
+    goal = "() if %s else throw(AssertionError, %s)" % (test, msg)
+    return parsed(goal)
+
 options = {
 
     ast.Module      : visit_Module,
@@ -88,7 +104,9 @@ options = {
     ast.Num         : visit_Num,
     ast.FunctionDef : visit_FunctionDef,
     ast.Return      : visit_Return,
-    ast.For         : visit_For
+    ast.For         : visit_For,
+    ast.If          : visit_If,
+    ast.Assert      : visit_Assert,
 
 }
 
