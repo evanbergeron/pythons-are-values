@@ -110,6 +110,12 @@ options = {
 
 }
 
+def is_listcomp(node):
+    try:
+        return type(node.value) is ast.ListComp
+    except AttributeError:
+        return False
+
 def expressionize(node):
     if DEBUG: print type(node)
     dfs_fix_children(node)
@@ -121,11 +127,16 @@ def expressionize(node):
         if type(node.body) is list and len(node.body) > 1:
             lines = []
             for item in node.body:
-                lmbda = ast.Lambda(args = [], body = item)
-                lines.append(lmbda)
+                if is_listcomp(item):
+                    # List comphrensions' side effects need to be
+                    # preserved in current namespace
+                    lines.append(item)
+                else:
+                    lmbda = ast.Lambda(args = [], body = item)
+                    lines.append(lmbda)
             # Black magic
             goal =  str([unparsed(line).replace("\n", "") for line in lines]).replace("'", "")
-            node.body = parsed("[_() for _ in %s]" % goal)
+            node.body = parsed("[_() if hasattr(_, '__call__') else _ for _ in %s]" % goal)
 
         elif isinstance(node.body, ast.AST):
             pass
