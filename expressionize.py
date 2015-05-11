@@ -4,12 +4,12 @@ import unparse
 from cStringIO import StringIO
 
 # Helpful macros
-DEF_LET = "globals().update({'let': lambda k,v : globals().update({k:v})})"
-IMPORT_SYS = "let('sys', __import__('sys'))"
-DEF_THROW = "let('throw', lambda e : (_ for _ in ()).throw(e))"
-DEF_PRINTF = "let('printf', lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s))))"
+DEF_LET_GLOBAL = "globals().update({'let_global': lambda k,v : globals().update({k:v})})"
+IMPORT_SYS = "let_global('sys', __import__('sys'))"
+DEF_THROW = "let_global('throw', lambda e : (_ for _ in ()).throw(e))"
+DEF_PRINTF = "let_global('printf', lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s))))"
 
-MACROS = [DEF_LET, IMPORT_SYS, DEF_THROW, DEF_PRINTF]
+MACROS = [DEF_LET_GLOBAL, IMPORT_SYS, DEF_THROW, DEF_PRINTF]
 HEADER = " or ".join(MACROS) + "\n"
 
 with open("a.py", 'w') as f:
@@ -72,6 +72,13 @@ def visit_FunctionDef(node):
 def visit_Return(node):
     return node.value
 
+def visit_For(node):
+    body = unparsed(node.body)
+    target = unparsed(node.target)
+    iterable = unparsed(node.iter)
+    goal = "[%s for %s in %s]" % (body, target, iterable)
+    return parsed(goal)
+
 options = {
 
     ast.Module      : visit_Module,
@@ -81,6 +88,7 @@ options = {
     ast.Num         : visit_Num,
     ast.FunctionDef : visit_FunctionDef,
     ast.Return      : visit_Return,
+    ast.For         : visit_For
 
 }
 
@@ -97,7 +105,6 @@ def expressionize(node):
             for item in node.body:
                 lmbda = ast.Lambda(args = [], body = item)
                 lines.append(lmbda)
-                print lines
             # Black magic
             goal =  str([unparsed(line).replace("\n", "") for line in lines]).replace("'", "")
             node.body = parsed("[_() for _ in %s]" % goal)

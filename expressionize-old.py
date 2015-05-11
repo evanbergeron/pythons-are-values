@@ -80,7 +80,7 @@ class ExpressionizeForLoops(Expressionizer):
         orTogether = OrBody()
         node = orTogether.visit(node)
         body = self.unparsed(node)
-        goal = "[(lambda : %s)() %s]" % (body, loopLine)
+        goal = "([(lambda : %s)() %s] and False)" % (body, loopLine)
         return self.parsed(goal)
 
 class DefToLambda(Expressionizer):
@@ -225,13 +225,13 @@ if __name__ == "__main__":
         conds = ExpressionizeConditionals()
         modified = conds.visit(modified)
 
-        # fix Loops
-        fixForLoops = ExpressionizeForLoops()
-        modified = fixForLoops.visit(modified)
-
         # Func to lambda
         noDefs = DefToLambda()
         modified = noDefs.visit(modified)
+
+        # fix Loops
+        fixForLoops = ExpressionizeForLoops()
+        modified = fixForLoops.visit(modified)
 
         # Or together bodies
         orMaster = OrBody()
