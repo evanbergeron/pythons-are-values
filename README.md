@@ -4,7 +4,7 @@ Pythons are Values is a hypothesis - that every python program has an equivalent
 
 ### Features
 
-The most up-to-date version of the project is in exp.py. The other python program is supplied as input via the command line. It is then parsed with the ast module into an abstract syntax tree. This tree is traversed and modified with DFS.
+The most up-to-date version of the project is in expressionize.py. The other python program is supplied as input via the command line. It is then parsed with the ast module into an abstract syntax tree. This tree is traversed and modified with DFS.
 
 - *Variable Assignment*
 ```python
@@ -22,13 +22,14 @@ lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s)))
 ```python
 lambda e : (_ for _ in ()).throw(e)
 ```
+- Conditionals as nested if-else expressions
+- For loops as list comphrensions
+- While loops as recursive lambda functions
 
 ### Todo
-- General cleanup
-- Bring exp.py up to date in functionality
-- Conditionals
+- Fix namespace issues
 - Tail recursion optimization to fix while loop lambda
+- Classes
 - Coroutines to generator comphrensions
 - Metaclasses / default type constructors
 - Try / Except clauses
-
