@@ -54,6 +54,7 @@ def visit_Print(node):
     return parsed(goal)
 
 def visit_Assign(node):
+    print "Assign", node._fields
     targets = unparsed(node.targets)
     value = unparsed(node.value)
     goal = "[%s for %s in [%s]]" % (targets, targets, value)
@@ -81,7 +82,6 @@ def visit_For(node):
     return parsed(goal)
 
 def visit_While(node):
-    # test, body, orelse
     test = 'lambda : %s' % unparsed(node.test)
     body = 'lambda : %s' % unparsed(node.body)
     goal = "WHILE(%s, %s)" % (test, body)
@@ -103,6 +103,34 @@ def visit_Assert(node):
     goal = "() if %s else throw(AssertionError, %s)" % (test, msg)
     return parsed(goal)
 
+def unparse_op(op):
+    if DEBUG: print type(op)
+    case = {
+
+           ast.Add : "+",
+           ast.Sub : "-",
+          ast.Mult : "*",
+        ast.BitAnd : "&",
+        ast.BitXor : "^",
+
+    }
+    if type(op) not in case:
+        print type(op)
+        raise FutureWarning
+    return case[type(op)]
+
+def visit_AugAssign(node):
+    # target, op, value
+    target = unparsed(node.target)
+    op = unparse_op(node.op)
+    value = unparsed(node.value)
+    goal = "[None for %s in [%s %s %s]]" % (target, target, op, value)
+    return parsed(goal)
+
+def visit_Add(node):
+    print node._fields
+    return node
+
 options = {
 
     ast.Module      : visit_Module,
@@ -116,6 +144,8 @@ options = {
     ast.While       : visit_While,
     ast.If          : visit_If,
     ast.Assert      : visit_Assert,
+    ast.AugAssign   : visit_AugAssign,
+    ast.Add         : visit_Add,
 
 }
 
