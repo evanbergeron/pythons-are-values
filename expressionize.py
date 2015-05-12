@@ -8,8 +8,9 @@ DEF_LET_GLOBAL = "globals().update({'let_global': lambda k,v : globals().update(
 IMPORT_SYS = "let_global('sys', __import__('sys'))"
 DEF_THROW = "let_global('throw', lambda e : (_ for _ in ()).throw(e))"
 DEF_PRINTF = "let_global('printf', lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s))))"
+DEF_WHILE = "let_global('WHILE', lambda e, b : (e() and (b(), WHILE(e, b)) or None))"
 
-MACROS = [DEF_LET_GLOBAL, IMPORT_SYS, DEF_THROW, DEF_PRINTF]
+MACROS = [DEF_LET_GLOBAL, IMPORT_SYS, DEF_THROW, DEF_PRINTF, DEF_WHILE]
 HEADER = " or ".join(MACROS) + "\n"
 
 with open("a.py", 'w') as f:
@@ -79,6 +80,13 @@ def visit_For(node):
     goal = "[%s for %s in %s]" % (body, target, iterable)
     return parsed(goal)
 
+def visit_While(node):
+    # test, body, orelse
+    test = 'lambda : %s' % unparsed(node.test)
+    body = 'lambda : %s' % unparsed(node.body)
+    goal = "WHILE(%s, %s)" % (test, body)
+    return parsed(goal)
+
 def visit_If(node):
     test = unparsed(node.test)
     body = unparsed(node.body)
@@ -105,6 +113,7 @@ options = {
     ast.FunctionDef : visit_FunctionDef,
     ast.Return      : visit_Return,
     ast.For         : visit_For,
+    ast.While       : visit_While,
     ast.If          : visit_If,
     ast.Assert      : visit_Assert,
 
