@@ -26,6 +26,7 @@ def parsed(source):
     return source.body[0]
 
 def unparsed(node):
+    '''Wrapper for the unparse module'''
     tmp = StringIO()
     unparse.Unparser(node, tmp)
     result = tmp.getvalue()
@@ -54,7 +55,6 @@ def visit_Print(node):
     return parsed(goal)
 
 def visit_Assign(node):
-    print "Assign", node._fields
     targets = unparsed(node.targets)
     value = unparsed(node.value)
     goal = "[%s for %s in [%s]]" % (targets, targets, value)
@@ -104,12 +104,12 @@ def visit_Assert(node):
     return parsed(goal)
 
 def unparse_op(op):
-    if DEBUG: print type(op)
     case = {
 
            ast.Add : "+",
            ast.Sub : "-",
           ast.Mult : "*",
+        ast.Div    : "/",
         ast.BitAnd : "&",
         ast.BitXor : "^",
 
@@ -127,10 +127,6 @@ def visit_AugAssign(node):
     goal = "[None for %s in [%s %s %s]]" % (target, target, op, value)
     return parsed(goal)
 
-def visit_Add(node):
-    print node._fields
-    return node
-
 options = {
 
     ast.Module      : visit_Module,
@@ -145,7 +141,6 @@ options = {
     ast.If          : visit_If,
     ast.Assert      : visit_Assert,
     ast.AugAssign   : visit_AugAssign,
-    ast.Add         : visit_Add,
 
 }
 
@@ -161,8 +156,11 @@ def expressionize(node):
 
     if hasattr(node, 'body') and type(node) is not ast.Module:
         # Replace multiple lines with a single list comphrension
-        # TODO - not fully working
 
+        # Each element in this list comphrension is either a
+        # lambda function representing a  line of code or
+        # another list comphrension, used for variable assignment
+        # and reassignment
         if type(node.body) is list and len(node.body) > 1:
             lines = []
             for item in node.body:

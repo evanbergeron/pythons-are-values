@@ -1,5 +1,2 @@
-(__import__('sys')._getframe((-1)).f_locals.update({'sys': __import__('sys')}) or sys._getframe((-1)).f_locals.update({'MODULE_LEVEL_VARS': sys._getframe((-1)).f_locals}) or sys._getframe((-1)).f_locals.update({'let': (lambda x, v: MODULE_LEVEL_VARS.update({x: v}))}) or let('throw', (lambda e: (_ for _ in ()).throw(e))) or let('printf', (lambda *s: sys.stdout.write(('%s\n' % ' '.join(map(str, s)))))))
-
-[foo for foo in [(lambda : [_() for _ in [(lambda : [bar for bar in [(lambda : None)]]), (lambda : bar())]])]]
-
-printf(foo())
+(globals().update({'let_global': (lambda k, v: globals().update({k: v}))}) or let_global('sys', __import__('sys')) or let_global('throw', (lambda e: (_ for _ in ()).throw(e))) or let_global('printf', (lambda *s: sys.stdout.write(('%s\n' % ' '.join(map(str, s)))))) or let_global('WHILE', (lambda e, b: ((e() and (b(), WHILE(e, b))) or None))))
+raise Exception('hello world')
