@@ -182,15 +182,18 @@ def expressionize(node):
     except KeyError:
         return node
 
+def main(src):
+    src = HEADER + src
+    try:
+        root = ast.parse(src)
+    except SyntaxError:
+        print "Invalid syntax in original file"
+        exit(-1)
+    exp = expressionize(root)
+    return unparsed(exp).strip()
+
 if __name__ == "__main__":
     with open(sys.argv[1], "r") as src:
         src = src.read()
         if DEBUG: print src
-        src = HEADER + src
-        try:
-            root = ast.parse(src)
-        except SyntaxError:
-            print "Invalid syntax in original file"
-            exit(-1)
-        exp = expressionize(root)
-        print unparsed(exp).strip()
+        print main(src)
