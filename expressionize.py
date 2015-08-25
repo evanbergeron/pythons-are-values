@@ -9,8 +9,11 @@ IMPORT_SYS = "let_global('sys', __import__('sys'))"
 DEF_THROW = "let_global('throw', lambda e : (_ for _ in ()).throw(e))"
 DEF_PRINTF = "let_global('printf', lambda *s : sys.stdout.write('%s\\n' % ' '.join(map(str, s))))"
 DEF_WHILE = "let_global('WHILE', lambda e, b : (e() and (b(), WHILE(e, b)) or None))"
+DEF_LET = "let_global('LET', None)"
+DEF_DEF = "let_global('DEF', None)"
+DEF_SUPPRESS = "let_global('SUPPRESS', lambda *vals : None)"
 
-MACROS = [DEF_LET_GLOBAL, IMPORT_SYS, DEF_THROW, DEF_PRINTF, DEF_WHILE]
+MACROS = [DEF_LET_GLOBAL, IMPORT_SYS, DEF_THROW, DEF_PRINTF, DEF_WHILE, DEF_LET, DEF_DEF, DEF_SUPPRESS]
 HEADER = " or ".join(MACROS) + "\n"
 
 with open("a.py", 'w') as f:
@@ -57,7 +60,7 @@ def visit_Print(node):
 def visit_Assign(node):
     targets = unparsed(node.targets)
     value = unparsed(node.value)
-    goal = "[%s for %s in [%s]]" % (targets, targets, value)
+    goal = "[LET for %s in [%s]]" % (targets, value)
     return parsed(goal)
 
 def visit_Num(node):
@@ -68,7 +71,7 @@ def visit_FunctionDef(node):
     args = unparsed(node.args)
     body = unparsed(node.body)
     func = "lambda %s : %s" % (args, body)
-    goal = "[%s for %s in [%s]]" % (name, name, func)
+    goal = "[DEF for %s in [%s]]" % (name, func)
     return parsed(goal)
 
 def visit_Return(node):
@@ -90,7 +93,7 @@ def visit_While(node):
 def visit_If(node):
     test = unparsed(node.test)
     body = unparsed(node.body)
-    if hasattr(node, "orelse"):
+    if hasattr(node, "orelse") and unparsed(node.orelse):
         elseClause = "%s" % unparsed(node.orelse)
     else:
         elseClause = "None"
@@ -169,11 +172,17 @@ def expressionize(node):
                     # preserved in current namespace
                     lines.append(item)
                 else:
-                    lmbda = ast.Lambda(args = [], body = item)
-                    lines.append(lmbda)
+                    lines.append(parsed( 
+                        'lambda d : (lambda **d : (%s, locals()))(**d)' 
+                        % unparsed(item)))
+
             # Black magic
-            goal =  str([unparsed(line).replace("\n", "") for line in lines]).replace("'", "")
-            node.body = parsed("[_() if hasattr(_, '__call__') else _ for _ in %s]" % goal)
+            goal =  str([unparsed(line).replace("\n", "") 
+                for line in lines]).replace("'", "")
+
+            node.body = parsed("[locals().update(_(locals())[1]) "
+                               "if hasattr(_, '__call__') "
+                               "else _ for _ in %s]" % goal)
 
         elif isinstance(node.body, ast.AST):
             pass
