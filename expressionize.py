@@ -38,6 +38,17 @@ def unparsed(node):
     tmp.close()
     return result.strip()
 
+def has_return_value(node):
+    # print node.body.value
+    # print type(node.body)
+    if type(node.body) is list:
+        for child in node.body:
+            if type(child.value) is ast.Return:
+                return True
+        return any([has_return_value(child.value) for child in node.body])
+    # return type(node.body.value) is ast.Return
+    return False
+
 def dfs_fix_children(node):
     # Bears great resemblence to ast.iter_fields
     for name, field in ast.iter_fields(node):
@@ -69,15 +80,24 @@ def visit_Num(node):
     return node
 
 def visit_FunctionDef(node):
+    print node.__dict__
+    print hasattr(node.body.value, 'isReturnValue'),
+    print node.body.value
+    print
     name = node.name
     args = unparsed(node.args)
     body = unparsed(node.body)
-    func = "lambda %s : %s" % (args, body)
+    if has_return_value(node):
+        func = "lambda %s : (%s)[0]" % (args, body)
+    else:
+        func = "lambda %s : (%s)" % (args, body)
     goal = "[DEF for %s in [%s]]" % (name, func)
     return parsed(goal)
 
 def visit_Return(node):
-    return node.value
+    result = node.value
+    setattr(result, 'isReturnValue', True)
+    return result
 
 def visit_For(node):
     body = unparsed(node.body)
@@ -166,7 +186,8 @@ def expressionize(node):
         # lambda function representing a  line of code or
         # another list comphrension, used for variable assignment
         # and reassignment
-        if type(node.body) is list and len(node.body) > 1:
+        if (type(node.body) is list and (len(node.body) > 1 or 
+            type(node) is ast.FunctionDef)):
             lines = []
             if not BOOLJOIN:
                 for item in node.body:
@@ -187,8 +208,20 @@ def expressionize(node):
                                    "if hasattr(_, '__call__') "
                                    "else _ for _ in %s]" % goal)
             else:
-                node.body = parsed(" and ".join(["(%s and False)" % 
-                    unparsed(item) for item in node.body]))
+                newBody = []
+                hasReturnValue = False
+                for item in node.body:
+                    if hasattr(item, 'isReturnValue') and item.isReturnValue:
+                        newBody.append("(%s, %s)" % (unparsed(item), unparsed(item)))
+                        hasReturnValue = True
+                    else:
+                        newBody.append("(%s,0)[1]" % unparsed(item))
+                    node.body = parsed(" or ".join(newBody))
+                    setattr(node.body, 'isReturnValue', hasReturnValue)
+
+                # node.body = parsed(" or ".join(["(%s, %s)" % (unparsed(item), unparsed(item)) if 
+                #     hasattr(item, 'isReturnValue') and item.isReturnValue else "(%s,0)[1]" % 
+                #     unparsed(item) for item in node.body]))
 
         elif isinstance(node.body, ast.AST):
             pass
