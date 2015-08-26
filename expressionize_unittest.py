@@ -62,6 +62,7 @@ class Functions(MyTestCase):
             '''
             y = 2
             def foo(x):
+                x += 4
                 return x + 1
             z = foo(y)
             ''',

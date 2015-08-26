@@ -22,6 +22,8 @@ with open("a.py", 'w') as f:
 # DEBUG = True
 DEBUG = False
 
+BOOLJOIN = True
+
 def parsed(source):
     '''Meant for parsing single lines of code'''
     source = ast.parse(source)
@@ -166,23 +168,27 @@ def expressionize(node):
         # and reassignment
         if type(node.body) is list and len(node.body) > 1:
             lines = []
-            for item in node.body:
-                if is_listcomp(item):
-                    # List comphrensions' side effects need to be
-                    # preserved in current namespace
-                    lines.append(item)
-                else:
-                    lines.append(parsed( 
-                        'lambda d : (lambda **d : (%s, locals()))(**d)' 
-                        % unparsed(item)))
+            if not BOOLJOIN:
+                for item in node.body:
+                    if is_listcomp(item):
+                        # List comphrensions' side effects need to be
+                        # preserved in current namespace
+                        lines.append(item)
+                    else:
+                        lines.append(parsed( 
+                            'lambda d : (lambda **d : (%s, locals()))(**d)' 
+                            % unparsed(item)))
 
-            # Black magic
-            goal =  str([unparsed(line).replace("\n", "") 
-                for line in lines]).replace("'", "")
+                # Black magic
+                goal =  str([unparsed(line).replace("\n", "") 
+                    for line in lines]).replace("'", "")
 
-            node.body = parsed("[locals().update(_(locals())[1]) "
-                               "if hasattr(_, '__call__') "
-                               "else _ for _ in %s]" % goal)
+                node.body = parsed("[locals().update(_(locals())[1]) "
+                                   "if hasattr(_, '__call__') "
+                                   "else _ for _ in %s]" % goal)
+            else:
+                node.body = parsed(" and ".join(["(%s and False)" % 
+                    unparsed(item) for item in node.body]))
 
         elif isinstance(node.body, ast.AST):
             pass
