@@ -1,4 +1,6 @@
 import unittest
+from os import listdir
+from os.path import isfile, join
 from textwrap import dedent
 
 import expressionize as exp
@@ -9,12 +11,22 @@ class MyTestCase(unittest.TestCase):
         self.tests = []
         self.reserved_names = {'__builtins__', 'code'}
 
-    def test_all(self): 
+    def namespaceCheck(self, test):
+        def run(code):
+            exec code in locals()
+            return locals()
+        orig_ns, expr_ns = run(test), run(exp.main(test))
+        orig_vars, expr_vars = set(orig_ns.keys()), set(expr_ns.keys())
+        for var in (orig_vars & expr_vars) - self.reserved_names:
+            if hasattr(orig_ns[var], '__eq__'):
+                self.assertEqual(orig_ns[var], expr_ns[var])
+
+    def test_all(self):
         def run(code):
             exec code in locals()
             return locals()
         for test in self.tests:
-            orig_ns, expr_ns = run(test), run(exp.main(test)) 
+            orig_ns, expr_ns = run(test), run(exp.main(test))
             orig_vars, expr_vars = set(orig_ns.keys()), set(expr_ns.keys())
             for var in (orig_vars & expr_vars) - self.reserved_names:
                 if hasattr(orig_ns[var], '__eq__'):
@@ -34,7 +46,7 @@ class LoopsAndConditionals(MyTestCase):
             for i in xrange(3):
                 for j in xrange(2):
                     y += i ^ j
-            ''', 
+            ''',
             '''
             z = 123
             for i in xrange(4):
@@ -68,6 +80,17 @@ class Functions(MyTestCase):
             ''',
             ]]
 
+class AllTests(MyTestCase):
+    def setUp(self):
+        super(AllTests, self).setUp()
+
+    def test_all(self): pass
 
 if __name__ == "__main__":
+    testdir = 'tests'
+    externalTests = [(f, open(join(testdir, f), 'r').read())
+            for f in listdir('tests') if f.endswith('.py')]
+    for name, test in externalTests:
+        setattr(AllTests, 'test_%s' % name,
+                lambda self : self.namespaceCheck(test))
     unittest.main()
