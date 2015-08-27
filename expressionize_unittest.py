@@ -13,11 +13,13 @@ class MyTestCase(unittest.TestCase):
 
     def namespaceCheck(self, test):
         def run(code):
+            # print code
             exec code in locals()
             return locals()
         orig_ns, expr_ns = run(test), run(exp.main(test))
         orig_vars, expr_vars = set(orig_ns.keys()), set(expr_ns.keys())
         for var in (orig_vars & expr_vars) - self.reserved_names:
+            # print orig_ns[var]
             if hasattr(orig_ns[var], '__eq__'):
                 self.assertEqual(orig_ns[var], expr_ns[var])
 
@@ -92,5 +94,5 @@ if __name__ == "__main__":
             for f in listdir('tests') if f.endswith('.py')]
     for name, test in externalTests:
         setattr(AllTests, 'test_%s' % name,
-                lambda self : self.namespaceCheck(test))
+                (lambda test : lambda self : self.namespaceCheck(test))(test))
     unittest.main()
