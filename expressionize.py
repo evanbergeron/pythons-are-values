@@ -91,8 +91,8 @@ def visit_For(node):
 
 def visit_While(node):
     test = 'lambda : %s' % unparsed(node.test)
-    body = 'lambda : %s' % unparsed(node.body)
-    goal = "WHILE(%s, %s)" % (test, body)
+    body = unparsed(node.body)
+    goal = "[%s for _ in iter(%s, False)]" % (body, test)
     return parsed(goal)
 
 def visit_If(node):
